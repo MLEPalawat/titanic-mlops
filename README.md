@@ -6,6 +6,295 @@ DVC (data + pipeline versioning), MLflow (experiment tracking + model registry),
 
 ---
 
+## Student Lab Guide
+
+Follow these steps in order. Each step builds on the previous one.
+
+### Prerequisites
+
+Make sure you have these installed before starting:
+- [Git](https://git-scm.com/downloads)
+- Python 3.9 or higher (`python --version` to check)
+- A [GitHub account](https://github.com)
+- A [Kaggle account](https://www.kaggle.com) (free — needed to download the dataset)
+
+---
+
+### Step 1: Create your personal branch on GitHub
+
+1. Open the repo in your browser: [https://github.com/MLEPalawat/titanic-mlops](https://github.com/MLEPalawat/titanic-mlops)
+2. Click the **`main`** branch dropdown (top-left, just above the file list)
+3. In the text box, type your branch name — use the format: `student-yourname`
+   - Example: `student-alice`, `student-bob`
+4. Click **"Create branch: student-yourname from main"**
+
+Your personal branch now exists on GitHub. All your experiment changes will go here.
+
+---
+
+### Step 2: Clone the repository to your local machine
+
+Open a terminal (Command Prompt, PowerShell, or bash) and run:
+
+```bash
+git clone https://github.com/MLEPalawat/titanic-mlops.git
+cd titanic-mlops
+```
+
+---
+
+### Step 3: Switch to your branch
+
+```bash
+# Replace "student-yourname" with the branch name you created in Step 1
+git checkout student-yourname
+```
+
+Verify you're on the right branch:
+```bash
+git branch
+# Output should show:  * student-yourname
+```
+
+---
+
+### Step 4: Create a virtual environment and install dependencies
+
+**Mac / Linux:**
+```bash
+python -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+**Windows:**
+```bash
+python -m venv venv
+venv\Scripts\activate
+pip install -r requirements.txt
+```
+
+You should see `(venv)` at the start of your terminal prompt once the environment is active.
+
+---
+
+### Step 5: Get the Titanic dataset
+
+The dataset is tracked by DVC (not stored directly in git). Download it from Kaggle:
+
+1. Go to [https://www.kaggle.com/c/titanic/data](https://www.kaggle.com/c/titanic/data)
+2. Download `train.csv`
+3. Rename it to `titanic.csv`
+4. Place it at: `data/raw/titanic.csv`
+
+> **Why this step?** In real MLOps, large data files are NOT stored in git. DVC tracks them separately. The `.dvc` pointer file is in git; the actual data lives elsewhere (a DVC remote, cloud storage, etc.).
+
+---
+
+### Step 6: Run the full pipeline for the first time
+
+```bash
+dvc repro
+```
+
+You should see all three stages execute:
+```
+Running stage 'preprocess' ...
+Running stage 'train' ...
+Running stage 'evaluate' ...
+```
+
+This runs: **preprocess → train → evaluate** in order.
+
+---
+
+### Step 7: See DVC caching in action
+
+Run the exact same command again immediately:
+
+```bash
+dvc repro
+```
+
+**Expected output:**
+```
+Stage 'preprocess' didn't change, skipping
+Stage 'train' didn't change, skipping
+Stage 'evaluate' didn't change, skipping
+Data and pipelines are up to date.
+```
+
+> **What just happened?** DVC hashed every input file and parameter. Nothing changed, so it skipped all stages and used cached results. This is how DVC saves time in real projects.
+
+---
+
+### Step 8: Open the MLflow UI
+
+Open a **second terminal window** (keep your first one open), activate the venv, and run:
+
+```bash
+# Mac/Linux
+source venv/bin/activate
+mlflow ui
+
+# Windows
+venv\Scripts\activate
+mlflow ui
+```
+
+Open your browser and go to: **http://localhost:5000**
+
+You should see the `titanic-survival` experiment with one run already logged from Step 6.
+
+> Keep this terminal running the whole session. MLflow UI updates live as you run more experiments.
+
+---
+
+### Step 9: Run Experiment 2 — change max_depth
+
+Open `params.yaml` in any text editor and change:
+
+```yaml
+model:
+  max_depth: 4    # change this to 6
+```
+
+Save the file, then run:
+
+```bash
+dvc repro
+```
+
+**Expected output:**
+```
+Stage 'preprocess' didn't change, skipping     ← data unchanged, skipped
+Running stage 'train' ...                       ← param changed, re-runs
+Running stage 'evaluate' ...                    ← downstream, re-runs
+```
+
+Now check the differences:
+
+```bash
+dvc params diff      # shows: max_depth changed 4 → 6
+dvc metrics show     # shows accuracy for current + previous run
+```
+
+**Refresh MLflow UI** — you should see a second run. Compare the two runs side by side.
+
+---
+
+### Step 10: Run Experiment 3 — change criterion
+
+Back in `params.yaml`, change:
+
+```yaml
+model:
+  criterion: gini   # change to: entropy
+```
+
+Save and run:
+
+```bash
+dvc repro
+```
+
+Refresh MLflow UI — now you have three runs to compare. Click **"Compare runs"** to see them side by side in a chart.
+
+---
+
+### Step 11: Run Experiment 4 — change min_samples_leaf
+
+In `params.yaml`, change:
+
+```yaml
+model:
+  min_samples_leaf: 5   # try 2
+```
+
+```bash
+dvc repro
+```
+
+You now have 4 runs in MLflow. Notice how each parameter change creates a new tracked experiment automatically — you never lose a result.
+
+---
+
+### Step 12: Register the best model
+
+Look at your MLflow UI runs. Find the run with the highest accuracy. Copy its **Run ID** (visible in the run details page).
+
+```bash
+# Register the best-performing run as a named model version
+python src/register_model.py --run-id <paste-run-id-here>
+
+# Or register the most recent run (no flag needed):
+python src/register_model.py
+```
+
+In the MLflow UI, click the **"Models"** tab. You should see `titanic-decision-tree` with a version listed as **Staging**.
+
+---
+
+### Step 13: Commit and push your experiment results
+
+```bash
+# Stage your changes (params and metrics only — DVC tracks the rest)
+git add params.yaml metrics.json
+
+git commit -m "experiment: max_depth=6, criterion=entropy — accuracy improved"
+
+git push origin student-yourname
+```
+
+Go to GitHub and open your branch. You can see your commit and compare it with classmates' branches.
+
+---
+
+### Step 14: Trigger a CI failure (optional demo)
+
+In `params.yaml`, remove `Sex` from the feature list:
+
+```yaml
+features:
+  use_columns:
+    - Pclass
+    # - Sex      ← remove this line
+    - Age
+    - SibSp
+    - Parch
+    - Fare
+    - Embarked
+```
+
+Push to GitHub:
+
+```bash
+git add params.yaml
+git commit -m "demo: remove Sex feature to trigger CI failure"
+git push origin student-yourname
+```
+
+Go to **GitHub → Actions tab** on your branch. The CI pipeline will run and fail because accuracy drops below `min_accuracy: 0.77` in `params.yaml`.
+
+Restore `Sex` to the feature list, push again, and watch the CI pass (green checkmark).
+
+---
+
+### Recap: What you just demonstrated
+
+| Tool | What you used it for |
+|---|---|
+| **Git branches** | Isolated your experiment work from the main codebase |
+| **DVC pipeline** | Ran 3-stage preprocess → train → evaluate pipeline |
+| **DVC caching** | Saw unchanged stages automatically skipped |
+| **DVC params diff** | Compared parameters between runs |
+| **MLflow tracking** | Every `dvc repro` automatically logged a new experiment run |
+| **MLflow comparison** | Compared accuracy across all 4 experiments side by side |
+| **MLflow registry** | Promoted a model version to Staging |
+| **GitHub Actions** | Saw a quality gate fail when model performance degraded |
+
+---
+
 ## Project structure
 
 ```

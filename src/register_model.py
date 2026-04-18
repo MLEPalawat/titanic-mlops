@@ -1,15 +1,20 @@
 # =============================================================================
-# src/register_model.py — Phase 4: MLflow Model Registry
+# src/register_model.py - Phase 4: MLflow Model Registry
 # =============================================================================
 # WHAT THIS SCRIPT DOES:
 #   Takes the best run from MLflow and registers it in the Model Registry.
-#   Demonstrates the full model lifecycle:
-#     None → Staging → Production → Archived
+#   Demonstrates the full model lifecycle using aliases:
+#     registered -> staging -> production
+#
+# NOTE: mlflow 3.x replaced stage names (Staging, Production) with aliases.
+#   Old: client.transition_model_version_stage(name, version, stage="Production")
+#   New: client.set_registered_model_alias(name, alias="production", version=...)
+#   Load: mlflow.pyfunc.load_model("models:/model-name@production")
 #
 # WHEN TO RUN THIS:
 #   After running train.py at least once and verifying the model is good.
-#   This is intentionally NOT part of the automated DVC pipeline —
-#   promotion to Production is a deliberate human decision.
+#   This is intentionally NOT part of the automated DVC pipeline -
+#   promotion to production is a deliberate human decision.
 #
 # HOW TO RUN:
 #   python src/register_model.py
@@ -18,10 +23,10 @@
 #   python src/register_model.py --run-id <run_id_from_mlflow_ui>
 #
 # KEY TEACHING POINT:
-#   After running this, show students how to LOAD a model by stage name:
+#   After running this, show students how to LOAD a model by alias:
 #     import mlflow.pyfunc
-#     model = mlflow.pyfunc.load_model("models:/titanic-decision-tree/Production")
-#   This is how real production systems work — no file paths, just registry names.
+#     model = mlflow.pyfunc.load_model("models:/titanic-decision-tree@production")
+#   This is how real production systems work - no file paths, just registry names.
 # =============================================================================
 
 import mlflow
@@ -52,23 +57,13 @@ def get_best_run(client: MlflowClient, experiment_name: str) -> str:
 
     Searches all runs in the experiment and returns the run_id of the
     run with the highest test accuracy.
-
-    Parameters
-    ----------
-    client : MlflowClient
-    experiment_name : str
-
-    Returns
-    -------
-    str : run_id of the best run
     """
     experiment = client.get_experiment_by_name(experiment_name)
     if experiment is None:
         print(f"[register] ERROR: Experiment '{experiment_name}' not found.")
-        print("  → Run `python src/train.py` first to create runs.")
+        print("  -> Run `python src/train.py` first to create runs.")
         sys.exit(1)
 
-    # Search runs sorted by accuracy (descending)
     runs = client.search_runs(
         experiment_ids=[experiment.experiment_id],
         order_by=["metrics.accuracy DESC"],
@@ -96,11 +91,6 @@ def register_model(client: MlflowClient, run_id: str, model_name: str) -> str:
     Register a model version from an existing MLflow run.
 
     Creates a new version under the given model name.
-    Initial stage is 'None' — we manually promote it below.
-
-    Returns
-    -------
-    str : the new version number
     """
     model_uri = f"runs:/{run_id}/decision-tree-model"
 
@@ -115,68 +105,63 @@ def register_model(client: MlflowClient, run_id: str, model_name: str) -> str:
 
     version = model_version.version
     print(f"  Version  : {version}")
-    print(f"  Stage    : None → will be promoted next")
 
     return version
 
 
 def promote_to_staging(client: MlflowClient, model_name: str, version: str) -> None:
     """
-    Move a model version to 'Staging' stage.
+    Tag a model version with alias 'staging'.
 
-    Staging = "ready for QA / validation — not yet in production"
+    In mlflow 3.x, stages were replaced with aliases.
+    'staging' = ready for QA / validation, not yet in production.
     """
-    client.transition_model_version_stage(
+    client.set_registered_model_alias(
         name    = model_name,
+        alias   = "staging",
         version = version,
-        stage   = "Staging",
     )
-    print(f"\n[register] Version {version} promoted to: Staging")
+    print(f"\n[register] Version {version} aliased as: staging")
 
 
 def promote_to_production(client: MlflowClient, model_name: str, version: str,
                            accuracy: float) -> None:
     """
-    Move a model version to 'Production' stage if it passes the quality gate.
-
-    Also archives the previous Production version automatically.
+    Tag a model version with alias 'production' if it passes the quality gate.
 
     TEACHING POINT:
       In real systems, this promotion would be triggered by CI after
-      a successful canary deploy evaluation — not just accuracy on test set.
+      a successful canary deploy evaluation, not just accuracy on test set.
     """
     if accuracy < MIN_ACCURACY:
         print(f"\n[register] BLOCKED: accuracy {accuracy:.4f} < threshold {MIN_ACCURACY}")
-        print("  → Model stays in Staging. Fix the model before promoting to Production.")
+        print("  -> Model stays in staging. Fix the model before promoting to production.")
         return
 
-    # archive_existing_versions=True → old Production version becomes Archived
-    client.transition_model_version_stage(
-        name                    = model_name,
-        version                 = version,
-        stage                   = "Production",
-        archive_existing_versions=True,   # Automatically archive the previous Production
+    client.set_registered_model_alias(
+        name    = model_name,
+        alias   = "production",
+        version = version,
     )
-    print(f"\n[register] Version {version} promoted to: Production")
-    print(f"  → Previous Production version (if any) is now Archived")
+    print(f"\n[register] Version {version} aliased as: production")
     print(f"\n  Load this model anywhere with:")
     print(f"    import mlflow.pyfunc")
-    print(f"    model = mlflow.pyfunc.load_model('models:/{model_name}/Production')")
+    print(f"    model = mlflow.pyfunc.load_model('models:/{model_name}@production')")
 
 
 def demo_load_from_registry(model_name: str) -> None:
     """
-    Demonstrate loading a model by stage name from the registry.
+    Demonstrate loading a model by alias from the registry.
 
-    This is the 'aha moment' — no file paths, no pickle files.
-    Just ask the registry for the Production model by name.
+    This is the 'aha moment' - no file paths, no pickle files.
+    Just ask the registry for the production model by name.
     """
-    print(f"\n[register] Demo: Loading Production model from registry...")
+    print(f"\n[register] Demo: Loading production model from registry...")
     try:
-        model = mlflow.pyfunc.load_model(f"models:/{model_name}/Production")
+        model = mlflow.pyfunc.load_model(f"models:/{model_name}@production")
         print(f"  Model loaded successfully!")
         print(f"  Type: {type(model)}")
-        print(f"  → In production code you would call: model.predict(X_new)")
+        print(f"  -> In production code you would call: model.predict(X_new)")
     except Exception as e:
         print(f"  Could not load model: {e}")
 
@@ -185,7 +170,6 @@ def demo_load_from_registry(model_name: str) -> None:
 # Main execution
 # ---------------------------------------------------------------------------
 if __name__ == "__main__":
-    # Optional: accept a specific run_id via command line
     parser = argparse.ArgumentParser(description="Register MLflow model to registry")
     parser.add_argument("--run-id", type=str, default=None,
                         help="Specific MLflow run ID to register (default: best run by accuracy)")
@@ -195,11 +179,9 @@ if __name__ == "__main__":
     print("PHASE 4: MLflow Model Registry")
     print("=" * 60)
 
-    # Set up MLflow client
     mlflow.set_tracking_uri(TRACKING_URI)
     client = MlflowClient()
 
-    # Step 1: Find or use specified run
     if args.run_id:
         run      = client.get_run(args.run_id)
         run_id   = args.run_id
@@ -208,18 +190,11 @@ if __name__ == "__main__":
     else:
         run_id, accuracy = get_best_run(client, EXPERIMENT)
 
-    # Step 2: Register the model (creates version 1, 2, 3... automatically)
     version = register_model(client, run_id, MODEL_NAME)
-
-    # Step 3: Promote to Staging
     promote_to_staging(client, MODEL_NAME, version)
-
-    # Step 4: Promote to Production (quality gate enforced inside)
     promote_to_production(client, MODEL_NAME, version, accuracy)
-
-    # Step 5: Demo load from registry
     demo_load_from_registry(MODEL_NAME)
 
     print("\n[register] Done!")
     print(f"[register] Open MLflow UI to see the registry:")
-    print(f"  mlflow ui → http://localhost:5000 → Models tab")
+    print(f"  mlflow ui -> http://localhost:5000 -> Models tab")

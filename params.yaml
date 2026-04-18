@@ -43,10 +43,10 @@ features:
 # ---------------------------------------------------------
 # TRY CHANGING THESE and running `dvc repro` to see MLflow track new experiments
 model:
-  max_depth: 4          # Max depth of the tree (None = unlimited, causes overfitting)
+  max_depth: 6          # Max depth of the tree (None = unlimited, causes overfitting)
   criterion: gini       # Split quality measure: "gini" or "entropy"
   min_samples_split: 10 # Min samples required to split an internal node
-  min_samples_leaf: 5   # Min samples required at a leaf node
+  min_samples_leaf: 2   # Min samples required at a leaf node
   random_state: 42      # For reproducible tree structure
 
 # ---------------------------------------------------------

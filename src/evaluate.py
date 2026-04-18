@@ -18,7 +18,7 @@
 #   python src/evaluate.py
 #
 # EXPECTED OUTPUT:
-#   Accuracy 0.8150 >= threshold 0.78 → PASS
+#   Accuracy 0.8150 >= threshold 0.78 -> PASS
 # =============================================================================
 
 import pandas as pd
@@ -67,7 +67,7 @@ def load_model(path: str):
     """
     if not os.path.exists(path):
         print(f"[evaluate] ERROR: Model not found at {path}")
-        print("  → Run `python src/train.py` or `dvc repro` first")
+        print("  -> Run `python src/train.py` or `dvc repro` first")
         sys.exit(1)
 
     with open(path, "rb") as f:
@@ -133,14 +133,14 @@ def evaluate(model, X_test, y_test) -> dict:
 
     print(f"\n[evaluate] Feature Importances:")
     for i in sorted_idx:
-        bar = "█" * int(importances[i] * 40)
+        bar = "#" * int(importances[i] * 40)
         print(f"  {feature_names[i]:15s}: {importances[i]:.4f}  {bar}")
 
     metrics = {
         "accuracy"        : accuracy,
-        "test_size"       : len(X_test),
-        "tree_depth_used" : model.get_depth(),
-        "n_leaves"        : model.get_n_leaves(),
+        "test_size"       : int(len(X_test)),
+        "tree_depth_used" : int(model.get_depth()),
+        "n_leaves"        : int(model.get_n_leaves()),
     }
 
     return metrics
@@ -166,12 +166,12 @@ def check_quality_gate(accuracy: float, threshold: float) -> None:
     print(f"  Threshold: {threshold:.4f}")
 
     if accuracy >= threshold:
-        print(f"  Result   : PASS ✓  ({accuracy:.4f} >= {threshold:.4f})")
+        print(f"  Result   : PASS PASS  ({accuracy:.4f} >= {threshold:.4f})")
     else:
-        print(f"  Result   : FAIL ✗  ({accuracy:.4f} < {threshold:.4f})")
+        print(f"  Result   : FAIL FAIL  ({accuracy:.4f} < {threshold:.4f})")
         print(f"\n  [evaluate] Model did not meet the quality gate.")
-        print(f"  → Investigate: did you remove an important feature?")
-        print(f"  → Or lower min_accuracy in params.yaml if threshold is too strict.")
+        print(f"  -> Investigate: did you remove an important feature?")
+        print(f"  -> Or lower min_accuracy in params.yaml if threshold is too strict.")
         # Exit code 1 = failure — GitHub Actions will mark the CI step as failed
         sys.exit(1)
 
@@ -193,7 +193,7 @@ def save_metrics(metrics: dict, path: str) -> None:
     with open(path, "w") as f:
         json.dump(metrics, f, indent=2)
     print(f"\n[evaluate] Metrics saved to: {path}")
-    print(f"  → Run `dvc metrics show` to compare across runs")
+    print(f"  -> Run `dvc metrics show` to compare across runs")
 
 
 # ---------------------------------------------------------------------------
@@ -217,8 +217,8 @@ if __name__ == "__main__":
     save_metrics(metrics, METRICS_PATH)
 
     # Step 5: Quality gate — this is what CI checks
-    # If this fails, the script exits with code 1 → CI workflow fails
+    # If this fails, the script exits with code 1 -> CI workflow fails
     check_quality_gate(metrics["accuracy"], MIN_ACCURACY)
 
     print("\n[evaluate] All checks passed. Model is ready for registration.")
-    print("[evaluate] Next step → Phase 4: Register model in MLflow Registry")
+    print("[evaluate] Next step -> Phase 4: Register model in MLflow Registry")

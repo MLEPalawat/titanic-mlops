@@ -77,7 +77,7 @@ def load_features(path: str):
     y = df["Survived"]
 
     print(f"[train] Features used: {list(X.columns)}")
-    print(f"[train] Class distribution — Survived: {y.sum()} ({y.mean()*100:.1f}%), Died: {(~y.astype(bool)).sum()}")
+    print(f"[train] Class distribution - Survived: {y.sum()} ({y.mean()*100:.1f}%), Died: {(~y.astype(bool)).sum()}")
     return X, y
 
 
