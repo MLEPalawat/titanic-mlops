@@ -67,19 +67,11 @@ jobs:
           echo "Dependencies installed successfully"
 
       # -----------------------------------------------------------------------
-      # Step 4: Initialize DVC
-      # -----------------------------------------------------------------------
-      - name: Initialize DVC
-        run: |
-          dvc init --no-scm || true   # --no-scm because git is already initialized
-          echo "DVC initialized"
-
-      # -----------------------------------------------------------------------
-      # Step 5: Run the full DVC pipeline
+      # Step 4: Run the full DVC pipeline
       # -----------------------------------------------------------------------
       # TEACHING POINT: `dvc repro` runs all 3 stages in order.
       # If a stage's deps haven't changed, it uses cached output.
-      # The --no-commit flag skips pushing to DVC remote (we don't have one in CI)
+      # titanic.csv is committed directly to git so no dvc pull needed.
       - name: Run DVC pipeline (preprocess → train → evaluate)
         run: |
           dvc repro --no-commit

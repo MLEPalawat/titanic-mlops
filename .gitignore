@@ -16,8 +16,7 @@ mlruns/
 models/*.pkl
 models/run_id.txt
 
-# Raw data (tracked by DVC .dvc files, not git directly)
-data/raw/titanic.csv
+# Raw data committed directly to git (small public dataset, no DVC remote needed for CI)
 data/processed/
 
 # IDE
