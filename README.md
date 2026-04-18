@@ -183,13 +183,13 @@ dvc metrics show     # shows accuracy for current + previous run
 
 ---
 
-### Step 10: Run Experiment 3 — change criterion
+### Step 10: Run Experiment 3 — trigger the quality gate (criterion: entropy)
 
 Back in `params.yaml`, change:
 
 ```yaml
 model:
-  criterion: gini   # change to: entropy
+  criterion: entropy    # was: gini
 ```
 
 Save and run:
@@ -198,22 +198,41 @@ Save and run:
 dvc repro
 ```
 
-Refresh MLflow UI — now you have three runs to compare. Click **"Compare runs"** to see them side by side in a chart.
+**Expected output (quality gate FAILS this time):**
+```
+[evaluate] Quality Gate Check:
+  Accuracy : 0.7654
+  Threshold: 0.7700
+  Result   : FAIL  (0.7654 < 0.7700)
+ERROR: failed to reproduce 'evaluate': failed to run: python src/evaluate.py, exited with 1
+```
+
+> **This is intentional.** `entropy` at `max_depth=6` produces a weaker model that falls below the minimum accuracy threshold. DVC marks the pipeline as failed — the same way GitHub Actions CI would fail.
+
+The MLflow UI will still show this run (the train stage logged it before evaluate caught the failure). Refresh and you'll see 3 runs — but this one would be blocked from reaching production.
+
+**Revert criterion before continuing:**
+```yaml
+model:
+  criterion: gini   # revert back
+```
 
 ---
 
 ### Step 11: Run Experiment 4 — change min_samples_leaf
 
-In `params.yaml`, change:
+Make sure `criterion` is back to `gini` from Step 10, then change:
 
 ```yaml
 model:
-  min_samples_leaf: 5   # try 2
+  min_samples_leaf: 2   # was: 5
 ```
 
 ```bash
 dvc repro
 ```
+
+This should be your **best accuracy yet** (around 0.7989). Quality gate passes.
 
 You now have 4 runs in MLflow. Notice how each parameter change creates a new tracked experiment automatically — you never lose a result.
 
@@ -231,17 +250,19 @@ python src/register_model.py --run-id <paste-run-id-here>
 python src/register_model.py
 ```
 
-In the MLflow UI, click the **"Models"** tab. You should see `titanic-decision-tree` with a version listed as **Staging**.
+In the MLflow UI, click the **"Models"** tab. You should see `titanic-decision-tree` version 1 with aliases **staging** and **production** assigned.
+
+> **Note:** mlflow 3.x replaced the old Staging/Production stage system with aliases. The script uses `set_registered_model_alias()` and you load the model with `@alias` syntax instead of `/StageName`.
 
 ---
 
 ### Step 13: Commit and push your experiment results
 
 ```bash
-# Stage your changes (params and metrics only — DVC tracks the rest)
-git add params.yaml metrics.json
+# Stage params, metrics, and the DVC lock file (records exact pipeline state)
+git add params.yaml metrics.json dvc.lock
 
-git commit -m "experiment: max_depth=6, criterion=entropy — accuracy improved"
+git commit -m "experiment: max_depth=6, min_samples_leaf=2 — accuracy 0.7989"
 
 git push origin student-yourname
 ```
@@ -398,12 +419,14 @@ python src/register_model.py --run-id <run_id_from_mlflow_ui>
 
 Then in the MLflow UI, go to the **Models** tab to see the registry.
 
-**Load the Production model by name (no file paths needed):**
+**Load the production model by alias (no file paths needed):**
 ```python
 import mlflow.pyfunc
-model = mlflow.pyfunc.load_model("models:/titanic-decision-tree/Production")
+model = mlflow.pyfunc.load_model("models:/titanic-decision-tree@production")
 predictions = model.predict(X_new)
 ```
+
+> **mlflow 3.x:** Stages (Staging/Production) were replaced with aliases. Use `@alias` syntax instead of `/StageName`.
 
 ---
 
@@ -448,5 +471,5 @@ Go to **GitHub → Actions tab** to watch the pipeline run.
 | `dvc.yaml` | Pipeline DAG: reproducible, stage-based execution |
 | `src/train.py` | Experiment tracking: every run is logged, nothing is lost |
 | `src/evaluate.py` | Quality gate: automated performance threshold |
-| `src/register_model.py` | Model versioning: Staging → Production lifecycle |
+| `src/register_model.py` | Model versioning: register → alias as staging/production |
 | `.github/workflows/ci.yml` | CI/CD: automated retraining + gating on every push |
