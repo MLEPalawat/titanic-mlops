@@ -80,10 +80,9 @@ You should see `(venv)` at the start of your terminal prompt once the environmen
 
 ### Step 5: Get the Titanic dataset
 
-The dataset is tracked by DVC (not stored directly in git). Download it from Kaggle:
+The dataset is tracked by DVC (not stored directly in git). Download it from Git:
 
-1. Go to [https://www.kaggle.com/c/titanic/data](https://www.kaggle.com/c/titanic/data)
-2. Download `train.csv`
+1. Go to Git repo
 3. Rename it to `titanic.csv`
 4. Place it at: `data/raw/titanic.csv`
 
